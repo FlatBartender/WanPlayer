@@ -103,7 +103,7 @@ async fn main() {
     let (stream_rx, stream_tx) = duplex(2usize.pow(16));
     let stream_handle = tokio::spawn(stream_thread(stream_tx));
 
-    let (decoder_tx, decoder_rx) = RingBuffer::new(2usize.pow(22)).split();
+    let (decoder_tx, decoder_rx) = RingBuffer::new(2usize.pow(18)).split();
     let decoder_handle = tokio::spawn(decoder_thread(decoder_tx, stream_rx, volume.clone()));
 
     let stream = player_init(decoder_rx);
