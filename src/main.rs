@@ -56,15 +56,13 @@ async fn stream_thread(mut tx: DuplexStream) {
     }
 }
 
-async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, volume: Arc<AtomicU8>) {
+async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream) {
     let mut decoder = minimp3::Decoder::new(rx);
 
     loop {
         match decoder.next_frame_future().await {
             Ok(Frame {data, ..}) => {
-                let factor = volume.load(Ordering::Relaxed) as f32 / 100.0;
-                let mut iter = data.into_iter()
-                    .map(|s| (s as f32 * factor) as i16);
+                let mut iter = data.into_iter();
                 tx.push_iter(&mut iter);
             },
             Err(Error::Eof) => break,
@@ -72,7 +70,7 @@ async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, volume: Arc<Ato
         }
     }
 }
-fn player_init(mut rx: Consumer<i16>) -> Stream {
+fn player_init(mut rx: Consumer<i16>, volume: Arc<AtomicU8>) -> Stream {
     let host = cpal::default_host();
     let device = host.default_output_device().expect("Failed to acquire default output device");
     let mut configs = device.supported_output_configs().expect("Failed to list supported output configs");
@@ -81,11 +79,13 @@ fn player_init(mut rx: Consumer<i16>) -> Stream {
 
     let stream = device.build_output_stream(&config,
         move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
-                rx.pop_slice(data);
-            },
-            move |err| {
-                println!("{}", err);
-            },
+            let factor = volume.load(Ordering::Relaxed) as f32 / 100.0;
+            rx.pop_slice(data);
+            data.iter_mut().for_each(|d| *d = (*d as f32 * factor) as i16);
+        },
+        move |err| {
+            println!("{}", err);
+        },
     ).expect("Failed to create stream");
 
     stream
@@ -99,9 +99,9 @@ async fn main() {
     let stream_handle = tokio::spawn(stream_thread(stream_tx));
 
     let (decoder_tx, decoder_rx) = RingBuffer::new(2usize.pow(18)).split();
-    let decoder_handle = tokio::spawn(decoder_thread(decoder_tx, stream_rx, volume.clone()));
+    let decoder_handle = tokio::spawn(decoder_thread(decoder_tx, stream_rx));
 
-    let stream = player_init(decoder_rx);
+    let stream = player_init(decoder_rx, volume.clone());
 
     let app = App::default();
     let (s, r) = fltk::app::channel::<PlayerMessage>();
