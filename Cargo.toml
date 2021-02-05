@@ -1,0 +1,19 @@
+[package]
+name = "wan_player"
+version = "0.1.0"
+authors = ["Flat Bartender <flat.bartender@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+debug = true
+
+[dependencies]
+ringbuf = "0.2"
+minimp3 = "0.5"
+cpal = "0.13"
+tokio = {features = ["full"], version = "1.1"}
+hyper = {features = ["http1", "stream"], version = "0.14"}
+hyper-tls = "0.5"
+futures-util = "*"
