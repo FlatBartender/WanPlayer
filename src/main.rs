@@ -98,7 +98,7 @@ fn player_init(mut rx: Consumer<i16>) -> Stream {
 
 #[tokio::main]
 async fn main() {
-    let volume = Arc::new(AtomicU8::new(100));
+    let volume = Arc::new(AtomicU8::new(10));
 
     let (stream_rx, stream_tx) = duplex(2usize.pow(16));
     let stream_handle = tokio::spawn(stream_thread(stream_tx));
