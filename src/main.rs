@@ -3,9 +3,6 @@ use cpal::{
     traits::{HostTrait, DeviceTrait, StreamTrait},
     Stream,
 };
-use hyper::{
-    body::HttpBody,
-};
 use tokio::io::{
     duplex,
     DuplexStream,
@@ -16,6 +13,12 @@ use ringbuf::{
     Producer,
     Consumer,
 };
+use fltk::{
+    app::*,
+    window::*,
+    button::*,
+};
+use hyper::body::HttpBody;
 
 use std::sync::{
     Arc,
@@ -105,7 +108,30 @@ async fn main() {
 
     let stream = player_init(decoder_rx);
 
-    stream.play().expect("Couldn't start playback");
+    let app = App::default();
+    let mut win = Window::new(100, 100, 400, 300, "Wan Player");
+    let mut but = Button::new(10, 10, 100, 100, "Play/Pause");
 
-    tokio::try_join!(stream_handle, decoder_handle).expect("Failed to join tasks");
+    win.end();
+    win.show();
+
+    let (s, r) = fltk::app::channel::<PlayerMessage>();
+
+    but.emit(s, PlayerMessage::PlayPause);
+
+    let mut playing = StreamStatus::Paused;
+
+    while app.wait() {
+        match r.recv() {
+            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Paused => {
+                stream.play().expect("Failed to play stream");
+                playing = StreamStatus::Playing;
+            },
+            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Paused => {
+                stream.pause().expect("Failed to pause stream");
+                playing = StreamStatus::Paused;
+            },
+            _ => (),
+        }
+    }
 }
