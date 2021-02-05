@@ -33,19 +33,12 @@ use std::sync::{
 enum PlayerMessage {
     PlayPause,
     VolumeChanged,
-    NeverEnding(()),   // Designed for futures that never stop
 }
 
 #[derive(PartialEq, Eq)]
 enum StreamStatus {
     Playing,
     Paused,
-}
-
-struct Player {
-    volume: Arc<AtomicU8>,
-    stream: Stream,
-    stream_status: StreamStatus,
 }
 
 async fn stream_thread(mut tx: DuplexStream) {
@@ -115,15 +108,13 @@ async fn main() {
     let mut win = Window::new(100, 100, 400, 300, "Wan Player");
     let mut but = Button::new(10, 10, 100, 100, "Play/Pause");
     but.emit(s.clone(), PlayerMessage::PlayPause);
-    let mut slider = valuator::HorSlider::new(10, 100, 100, 10, "Volume");
+    let mut slider = valuator::HorSlider::new(10, 150, 100, 10, "Volume");
     slider.set_bounds(0.0, 100.0);
     slider.set_value(volume.load(Ordering::Relaxed) as f64);
     slider.emit(s.clone(), PlayerMessage::VolumeChanged);
 
     win.end();
     win.show();
-
-
 
     let mut playing = StreamStatus::Paused;
 
