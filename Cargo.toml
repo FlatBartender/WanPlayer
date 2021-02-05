@@ -10,10 +10,8 @@ edition = "2018"
 debug = true
 
 [dependencies]
-ringbuf = "0.2"
-minimp3 = "0.5"
+minimp3 = {features = ["async_tokio"], version = "0.5"}
 cpal = "0.13"
-tokio = {features = ["full"], version = "1.1"}
+tokio = {features = ["full"], version = "1"}
 hyper = {features = ["http1", "stream"], version = "0.14"}
 hyper-tls = "0.5"
-futures-util = "*"
