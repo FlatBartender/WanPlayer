@@ -69,7 +69,7 @@ async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, volume: Arc<Ato
             Ok(Frame {data, ..}) => {
                 let factor = volume.load(Ordering::Relaxed) as f32 / 100.0;
                 let mut iter = data.into_iter()
-                    .map(|s| (s as f32 / factor) as i16);
+                    .map(|s| (s as f32 * factor) as i16);
                 tx.push_iter(&mut iter);
             },
             Err(Error::Eof) => break,
