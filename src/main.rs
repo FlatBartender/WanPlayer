@@ -17,6 +17,7 @@ use fltk::{
     app::*,
     window::*,
     button::*,
+    valuator,
 };
 use hyper::body::HttpBody;
 
@@ -31,6 +32,7 @@ use std::sync::{
 #[derive(Debug, Clone)]
 enum PlayerMessage {
     PlayPause,
+    VolumeChanged,
     NeverEnding(()),   // Designed for futures that never stop
 }
 
@@ -109,15 +111,19 @@ async fn main() {
     let stream = player_init(decoder_rx);
 
     let app = App::default();
+    let (s, r) = fltk::app::channel::<PlayerMessage>();
     let mut win = Window::new(100, 100, 400, 300, "Wan Player");
     let mut but = Button::new(10, 10, 100, 100, "Play/Pause");
+    but.emit(s.clone(), PlayerMessage::PlayPause);
+    let mut slider = valuator::HorSlider::new(10, 100, 100, 10, "Volume");
+    slider.set_bounds(0.0, 100.0);
+    slider.set_value(volume.load(Ordering::Relaxed) as f64);
+    slider.emit(s.clone(), PlayerMessage::VolumeChanged);
 
     win.end();
     win.show();
 
-    let (s, r) = fltk::app::channel::<PlayerMessage>();
 
-    but.emit(s, PlayerMessage::PlayPause);
 
     let mut playing = StreamStatus::Paused;
 
@@ -130,6 +136,9 @@ async fn main() {
             Some(PlayerMessage::PlayPause) if playing == StreamStatus::Playing => {
                 stream.pause().expect("Failed to pause stream");
                 playing = StreamStatus::Paused;
+            },
+            Some(PlayerMessage::VolumeChanged) => {
+                volume.store(slider.value() as u8, Ordering::Relaxed);
             },
             _ => (),
         }
