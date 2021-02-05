@@ -127,7 +127,7 @@ async fn main() {
                 stream.play().expect("Failed to play stream");
                 playing = StreamStatus::Playing;
             },
-            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Paused => {
+            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Playing => {
                 stream.pause().expect("Failed to pause stream");
                 playing = StreamStatus::Paused;
             },
