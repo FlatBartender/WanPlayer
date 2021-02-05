@@ -1,4 +1,4 @@
-use minimp3::{Decoder, Frame, Error};
+use minimp3::{Frame, Error};
 use cpal::{
     traits::{HostTrait, DeviceTrait, StreamTrait},
     Stream,
@@ -6,20 +6,15 @@ use cpal::{
 use hyper::{
     body::HttpBody,
 };
-use tokio::{
-    io::{
-        duplex,
-        DuplexStream,
-        AsyncRead,
-        AsyncReadExt,
-        AsyncWrite,
-        AsyncWriteExt,
-    },
-    sync::mpsc::{
-        UnboundedSender,
-        UnboundedReceiver,
-        unbounded_channel,
-    }
+use tokio::io::{
+    duplex,
+    DuplexStream,
+    AsyncWriteExt,
+};
+use ringbuf::{
+    RingBuffer,
+    Producer,
+    Consumer,
 };
 
 use std::sync::{
@@ -59,27 +54,27 @@ async fn stream_thread(mut tx: DuplexStream) {
 
     while let Some(chunk) = res.data().await {
         let slice = &chunk.expect("Failed to convert response body to byte chunk")[..];
-        tx.write_all(slice);
+        tx.write_all(slice).await.expect("Failed to send stream to decoder");
     }
 }
 
-async fn decoder_thread(tx: UnboundedSender<i16>, rx: DuplexStream, volume: Arc<AtomicU8>) {
-    let mut decoder = Decoder::new(rx);
+async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, volume: Arc<AtomicU8>) {
+    let mut decoder = minimp3::Decoder::new(rx);
 
     loop {
         match decoder.next_frame_future().await {
             Ok(Frame {data, ..}) => {
-                let factor = volume.load(Ordering::Relaxed) as f32;
-                data.iter()
-                    .map(|s| (*s as f32 / 100.0 * factor) as i16)
-                    .for_each(|s| tx.send(s).expect("Failed to send sample"));
+                let factor = volume.load(Ordering::Relaxed) as f32 / 100.0;
+                let mut iter = data.into_iter()
+                    .map(|s| (s as f32 / factor) as i16);
+                tx.push_iter(&mut iter);
             },
             Err(Error::Eof) => break,
             Err(e) => println!("{:?}", e),
         }
     }
 }
-fn player_init(mut rx: UnboundedReceiver<i16>) -> Stream {
+fn player_init(mut rx: Consumer<i16>) -> Stream {
     let host = cpal::default_host();
     let device = host.default_output_device().expect("Failed to acquire default output device");
     let mut configs = device.supported_output_configs().expect("Failed to list supported output configs");
@@ -88,7 +83,7 @@ fn player_init(mut rx: UnboundedReceiver<i16>) -> Stream {
 
     let stream = device.build_output_stream(&config,
         move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
-                data.iter_mut().for_each(|d| *d = rx.blocking_recv().unwrap_or(0));
+                rx.pop_slice(data);
             },
             move |err| {
                 println!("{}", err);
@@ -102,10 +97,10 @@ fn player_init(mut rx: UnboundedReceiver<i16>) -> Stream {
 async fn main() {
     let volume = Arc::new(AtomicU8::new(100));
 
-    let (stream_tx, stream_rx) = duplex(2usize.pow(22));
+    let (stream_rx, stream_tx) = duplex(2usize.pow(16));
     let stream_handle = tokio::spawn(stream_thread(stream_tx));
 
-    let (decoder_tx, decoder_rx) = unbounded_channel();
+    let (decoder_tx, decoder_rx) = RingBuffer::new(2usize.pow(22)).split();
     let decoder_handle = tokio::spawn(decoder_thread(decoder_tx, stream_rx, volume.clone()));
 
     let stream = player_init(decoder_rx);
