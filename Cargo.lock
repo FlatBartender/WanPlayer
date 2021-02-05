@@ -1221,6 +1221,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ringbuf"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "930c1d8c4c3341099e662d45a884aa8047ab659bfb579747a48598bb86aae062"
+
+[[package]]
 name = "rle-decode-fast"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1793,6 +1799,7 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "minimp3",
+ "ringbuf",
  "tokio",
 ]
 

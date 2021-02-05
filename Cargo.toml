@@ -15,3 +15,4 @@ cpal = "0.13"
 tokio = {features = ["full"], version = "1"}
 hyper = {features = ["http1", "stream"], version = "0.14"}
 hyper-tls = "0.5"
+ringbuf = "0.2"
