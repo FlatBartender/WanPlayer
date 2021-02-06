@@ -3,6 +3,7 @@ use cpal::{
     traits::{HostTrait, DeviceTrait, StreamTrait},
     Stream,
 };
+use serde::Deserialize;
 use tokio::io::{
     duplex,
     DuplexStream,
@@ -12,12 +13,6 @@ use ringbuf::{
     RingBuffer,
     Producer,
     Consumer,
-};
-use fltk::{
-    app::*,
-    window::*,
-    button::*,
-    valuator,
 };
 use hyper::body::HttpBody;
 
@@ -91,6 +86,58 @@ fn player_init(mut rx: Consumer<i16>, volume: Arc<AtomicU8>) -> Stream {
     stream
 }
 
+struct ApiClient {
+    client: hyper::client::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
+}
+
+impl ApiClient {
+    pub fn new() -> ApiClient {
+        let https = hyper_tls::HttpsConnector::new();
+        let client = hyper::client::Client::builder()
+            .build::<_, hyper::Body>(https);
+        ApiClient {
+            client
+        }
+    }
+
+    pub async fn get_song_info(&mut self) -> GRApiAnswer {
+        let res = self.client.get(hyper::Uri::from_static("https://gensokyoradio.net/json/"))
+            .await
+            .expect("Failed to request song info");
+
+        let data = hyper::body::to_bytes(res.into_body()).await.expect("Failed to collect song info request body");
+
+        serde_json::from_slice(&data[..]).expect("Failed to parse song info")
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all="UPPERCASE")]
+struct SongInfo {
+    title: String,
+    artist: String,
+    album: String,
+    year: String,
+    circle: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all="UPPERCASE")]
+struct SongTimes {
+    duration: String,
+    played: u16,
+    remaining: u16,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all="UPPERCASE")]
+struct GRApiAnswer {
+    songinfo: SongInfo,
+    songtimes: SongTimes,
+}
+
+const PLAY_SVG: &str = include_str!("resources/play.svg");
+
 #[tokio::main]
 async fn main() {
     let volume = Arc::new(AtomicU8::new(10));
@@ -103,35 +150,8 @@ async fn main() {
 
     let stream = player_init(decoder_rx, volume.clone());
 
-    let app = App::default();
-    let (s, r) = fltk::app::channel::<PlayerMessage>();
-    let mut win = Window::new(100, 100, 400, 300, "Wan Player");
-    let mut but = Button::new(10, 10, 100, 100, "Play/Pause");
-    but.emit(s.clone(), PlayerMessage::PlayPause);
-    let mut slider = valuator::HorSlider::new(10, 150, 100, 10, "Volume");
-    slider.set_bounds(0.0, 100.0);
-    slider.set_value(volume.load(Ordering::Relaxed) as f64);
-    slider.emit(s.clone(), PlayerMessage::VolumeChanged);
-
-    win.end();
-    win.show();
-
     let mut playing = StreamStatus::Paused;
+    let mut api_client = ApiClient::new();
 
-    while app.wait() {
-        match r.recv() {
-            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Paused => {
-                stream.play().expect("Failed to play stream");
-                playing = StreamStatus::Playing;
-            },
-            Some(PlayerMessage::PlayPause) if playing == StreamStatus::Playing => {
-                stream.pause().expect("Failed to pause stream");
-                playing = StreamStatus::Paused;
-            },
-            Some(PlayerMessage::VolumeChanged) => {
-                volume.store(slider.value() as u8, Ordering::Relaxed);
-            },
-            _ => (),
-        }
-    }
+    tokio::try_join!(stream_handle, decoder_handle).unwrap();
 }
