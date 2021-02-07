@@ -14,7 +14,6 @@ use hyper::body::HttpBody;
 
 use std::sync::{
     Arc,
-    Mutex,
     mpsc::{
         channel,
         Receiver,

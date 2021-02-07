@@ -1,13 +1,12 @@
 mod gensokyo_radio;
 mod pipeline;
 mod executor;
-mod widget;
 
 #[derive(Debug, Clone)]
 enum PlayerMessage {
     Play,
     Pause,
-    VolumeChanged,
+    VolumeChanged(u8),
 }
 
 #[derive(PartialEq, Eq)]
@@ -18,6 +17,8 @@ enum PlayerStatus {
 
 const PLAY_SVG: &str = include_str!("resources/play.svg");
 const PAUSE_SVG: &str = include_str!("resources/pause.svg");
+
+const DEFAULT_VOLUME: u8 = 10;
 
 use iced::{
     Application,
@@ -31,12 +32,11 @@ struct Player {
     player_status: PlayerStatus,
     player_tx: std::sync::mpsc::Sender<pipeline::PlayerControl>,
     api_client: gensokyo_radio::ApiClient,
+    volume: u8,
+    
+    play_pause_state: iced_widget::button::State,
+    volume_slider_state: iced_widget::slider::State,
 }
-
-use iced_native::{
-    event,
-    mouse,
-};
 
 impl Application for Player {
 
@@ -50,11 +50,17 @@ impl Application for Player {
         let player_status = PlayerStatus::Paused;
         let api_client = gensokyo_radio::ApiClient::new();
 
+        player_tx.send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME)).expect("Failed to set initial volume");
+
         (
             Player {
                 player_status,
                 api_client,
                 player_tx,
+                volume: DEFAULT_VOLUME,
+
+                play_pause_state: iced_widget::button::State::new(),
+                volume_slider_state: iced_widget::slider::State::new(),
             },
             iced::Command::none()
         )
@@ -76,6 +82,10 @@ impl Application for Player {
                 self.player_tx.send(PlayerControl::Pause).expect("Failed to send pause command to Player");
                 self.player_status = PlayerStatus::Paused;
             },
+            PlayerMessage::VolumeChanged(volume) => {
+                self.player_tx.send(PlayerControl::Volume(volume)).expect("Failed to send volume command to Player");
+                self.volume = volume;
+            },
             _ => unimplemented!()
         }
 
@@ -83,30 +93,23 @@ impl Application for Player {
     }
 
     fn view(&mut self) -> Element<Self::Message> {
-        let play_pause = {
-            let (event, message, svg_source) = match self.player_status {
-                PlayerStatus::Playing => {
-                    (
-                        widget::Event::Mouse(widget::mouse::Event::ButtonPressed(widget::mouse::Button::Left)),
-                        PlayerMessage::Pause,
-                        PAUSE_SVG,
-                    )
-                },
-                PlayerStatus::Paused => {
-                    (
-                        widget::Event::Mouse(widget::mouse::Event::ButtonPressed(widget::mouse::Button::Left)),
-                        PlayerMessage::Play,
-                        PLAY_SVG,
-                    )
-                }
+        let (svg_source, button_message) = match self.player_status {
+                PlayerStatus::Playing => (PAUSE_SVG, PlayerMessage::Pause),
+                PlayerStatus::Paused => (PLAY_SVG, PlayerMessage::Play),
             };
 
-            let svg = iced_widget::Svg::new(iced_widget::svg::Handle::from_memory(svg_source));
-            widget::AddEventListener::new(svg)
-                .add_event_listener(event, message)
-        };
+        let play_pause_svg = iced_widget::Svg::new(iced_widget::svg::Handle::from_memory(svg_source));
+        let play_pause = iced_widget::Button::new(&mut self.play_pause_state, play_pause_svg)
+            .on_press(button_message);
 
-        play_pause.into()
+        let volume_slider = iced_widget::Slider::new(&mut self.volume_slider_state, 0..=100, self.volume, PlayerMessage::VolumeChanged)
+            .step(1);
+
+        let controls = iced_widget::Row::new()
+            .push(play_pause)
+            .push(volume_slider);
+
+        controls.into()
     }
 }
 

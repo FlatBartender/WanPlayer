@@ -30,7 +30,7 @@ impl ApiClient {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all="UPPERCASE")]
-struct SongInfo {
+pub struct SongInfo {
     pub title: String,
     pub artist: String,
     pub album: String,
@@ -40,7 +40,7 @@ struct SongInfo {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all="UPPERCASE")]
-struct SongTimes {
+pub struct SongTimes {
     pub duration: String,
     pub played: u16,
     pub remaining: u16,
@@ -48,7 +48,7 @@ struct SongTimes {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all="UPPERCASE")]
-struct GRApiAnswer {
+pub struct GRApiAnswer {
     pub songinfo: SongInfo,
     pub songtimes: SongTimes,
 }
