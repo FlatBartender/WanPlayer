@@ -6,6 +6,7 @@ pub struct ApiClient {
 
 pub const GR_API: &str = "https://gensokyoradio.net/json/";
 pub const GR_STREAM: &str = "https://stream.gensokyoradio.net/1/";
+pub const GR_ALBUMART_ROOT: &str = "https://gensokyoradio.net/images/albums/500/";
 
 impl ApiClient {
     pub fn new() -> ApiClient {
@@ -17,18 +18,21 @@ impl ApiClient {
         }
     }
 
-    pub async fn get_song_info(&mut self) -> GRApiAnswer {
+    pub async fn get_song_info(&self) -> GRApiAnswer {
         let res = self.client.get(hyper::Uri::from_static(GR_API))
             .await
             .expect("Failed to request song info");
 
         let data = hyper::body::to_bytes(res.into_body()).await.expect("Failed to collect song info request body");
 
-        serde_json::from_slice(&data[..]).expect("Failed to parse song info")
+        let mut response: GRApiAnswer = serde_json::from_slice(&data[..]).expect("Failed to parse song info");
+        response.misc.albumart = format!("{}{}", GR_ALBUMART_ROOT, response.misc.albumart);
+
+        response
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all="UPPERCASE")]
 pub struct SongInfo {
     pub title: String,
@@ -38,7 +42,7 @@ pub struct SongInfo {
     pub circle: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all="UPPERCASE")]
 pub struct SongTimes {
     pub duration: String,
@@ -46,11 +50,20 @@ pub struct SongTimes {
     pub remaining: u16,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all="UPPERCASE")]
+pub struct Misc {
+    circlelink: String,
+    circleart: String,
+    albumart: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all="UPPERCASE")]
 pub struct GRApiAnswer {
     pub songinfo: SongInfo,
     pub songtimes: SongTimes,
+    pub misc: Misc,
 }
 
 
