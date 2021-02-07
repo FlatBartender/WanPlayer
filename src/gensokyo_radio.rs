@@ -8,6 +8,8 @@ pub const GR_API: &str = "https://gensokyoradio.net/json/";
 pub const GR_STREAM: &str = "https://stream.gensokyoradio.net/1/";
 pub const GR_ALBUMART_ROOT: &str = "https://gensokyoradio.net/images/albums/500/";
 
+const RETRY_SLEEP: u64 = 5;
+
 impl ApiClient {
     pub fn new() -> ApiClient {
         let https = hyper_tls::HttpsConnector::new();
@@ -19,16 +21,47 @@ impl ApiClient {
     }
 
     pub async fn get_song_info(&self) -> GRApiAnswer {
-        let res = self.client.get(hyper::Uri::from_static(GR_API))
-            .await
-            .expect("Failed to request song info");
+        let mut response = loop {
+            let res = self.client.get(hyper::Uri::from_static(GR_API))
+                .await
+                .expect("Failed to request song info");
 
-        let data = hyper::body::to_bytes(res.into_body()).await.expect("Failed to collect song info request body");
+            let data = hyper::body::to_bytes(res.into_body()).await.expect("Failed to collect song info request body");
 
-        let mut response: GRApiAnswer = serde_json::from_slice(&data[..]).expect("Failed to parse song info");
-        response.misc.albumart = format!("{}{}", GR_ALBUMART_ROOT, response.misc.albumart);
-
+            match serde_json::from_slice::<GRApiAnswer>(&data[..]) {
+                Ok(song_info) => break song_info,
+                Err(error) => println!("{}", error),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(RETRY_SLEEP)).await;
+        };
+        response.songtimes.duration= response.songtimes.duration_str.parse().expect("Failed to parse duration");
         response
+    }
+
+    pub async fn get_album_image(&self, ans: &GRApiAnswer) -> Option<Vec<u8>> {
+        let req_path = format!("{}{}", GR_ALBUMART_ROOT, ans.misc.albumart);
+        println!("req_path: {}", req_path);
+        let res = self.client.get(req_path.parse::<hyper::Uri>().expect("Failed to parse album art as uri"))
+            .await;
+
+        let res = match res {
+            Err(err) => {
+                println!("err: {}", err);
+                return None;
+            }
+            Ok(res) => res,
+        };
+
+        let data = hyper::body::to_bytes(res.into_body()).await;
+        let data = match data {
+            Err(err) => {
+                println!("err: {}", err);
+                return None;
+            }
+            Ok(res) => res,
+        };
+
+        Some(data.to_vec())
     }
 }
 
@@ -45,9 +78,12 @@ pub struct SongInfo {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all="UPPERCASE")]
 pub struct SongTimes {
-    pub duration: String,
-    pub played: u16,
-    pub remaining: u16,
+    #[serde(rename = "DURATION")]
+    pub duration_str: String,
+    #[serde(skip)]
+    pub duration: u64,
+    pub played: u64,
+    pub remaining: u64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -65,5 +101,3 @@ pub struct GRApiAnswer {
     pub songtimes: SongTimes,
     pub misc: Misc,
 }
-
-

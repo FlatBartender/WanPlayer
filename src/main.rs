@@ -9,7 +9,9 @@ enum PlayerMessage {
     Play,
     Pause,
     VolumeChanged(u8),
+    AlbumArt(Option<Vec<u8>>),
     SongInfo(gensokyo_radio::GRApiAnswer),
+    IncrementElapsed,
 }
 
 #[derive(PartialEq, Eq)]
@@ -20,6 +22,7 @@ enum PlayerStatus {
 
 const PLAY_SVG: &str = include_str!("resources/play.svg");
 const PAUSE_SVG: &str = include_str!("resources/pause.svg");
+const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
 
 const DEFAULT_VOLUME: u8 = 10;
 
@@ -36,6 +39,7 @@ struct Player {
     player_tx: std::sync::mpsc::Sender<pipeline::PlayerControl>,
     api_client: Arc<gensokyo_radio::ApiClient>,
     volume: u8,
+    album_image: Option<Vec<u8>>,
     current_song_info: Option<gensokyo_radio::GRApiAnswer>,
     
     play_pause_state: widget::button::State,
@@ -57,18 +61,24 @@ impl Application for Player {
 
         player_tx.send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME)).expect("Failed to set initial volume");
 
+        let commands = vec![
+            Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo),
+            Command::perform(async move { tokio::time::sleep(std::time::Duration::from_secs(1)).await }, |_| {PlayerMessage::IncrementElapsed})
+        ];
+
         (
             Player {
                 player_status,
                 player_tx,
                 api_client,
+                album_image: None,
                 volume: DEFAULT_VOLUME,
                 current_song_info: None,
 
                 play_pause_state: widget::button::State::new(),
                 volume_slider_state: widget::slider::State::new(),
             },
-            Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo)
+            Command::batch(commands)
         )
     }
 
@@ -95,16 +105,31 @@ impl Application for Player {
                 self.volume = volume;
                 Command::none()
             },
+            PlayerMessage::AlbumArt(opt_art) => {
+                self.album_image = opt_art;
+                Command::none()
+            },
             PlayerMessage::SongInfo(song_info) => {
-                let sleep_duration = song_info.songtimes.remaining + 1;
-                self.current_song_info = Some(song_info);
+                self.current_song_info = Some(song_info.clone());
                 let fut_api_client = self.api_client.clone();
                 Command::perform(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(sleep_duration as u64)).await;
-                    fut_api_client.get_song_info().await
-                }, PlayerMessage::SongInfo)
+                    fut_api_client.get_album_image(&song_info).await
+                }, PlayerMessage::AlbumArt)
+            },
+            PlayerMessage::IncrementElapsed => {
+                let mut commands = Vec::with_capacity(2);
+                if let Some(ref mut info) = self.current_song_info {
+                    info.songtimes.played += 1;
+                    if info.songtimes.played == info.songtimes.duration {
+                        let fut_api_client = self.api_client.clone();
+                        commands.push(Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo))
+                    }
+                }
+                commands.push(Command::perform(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await
+                }, |_| {PlayerMessage::IncrementElapsed}));
+                Command::batch(commands)
             }
-            _ => unimplemented!()
         }
     }
 
@@ -113,9 +138,38 @@ impl Application for Player {
         let infos = if let Some(ref song_info) = self.current_song_info {
             infos.push(widget::Text::new(&song_info.songinfo.title))
                 .push(widget::Text::new(&song_info.songinfo.artist))
+                .push(widget::Text::new(&song_info.songinfo.album))
+                .push(widget::Text::new(&song_info.songinfo.circle))
+                .push(widget::Text::new(&song_info.songinfo.year))
+                .push(widget::Text::new(format!("{}:{:02}/{}:{:02}", 
+                            song_info.songtimes.played/60,
+                            song_info.songtimes.played%60,
+                            song_info.songtimes.duration/60,
+                            song_info.songtimes.duration%60)))
         } else {
-            infos
+            infos.push(widget::Text::new(""))
+                .push(widget::Text::new(""))
+                .push(widget::Text::new(""))
+                .push(widget::Text::new(""))
+                .push(widget::Text::new(""))
+                .push(widget::Text::new("--:--"))
         };
+
+        let song = widget::Row::new();
+
+        let song = match self.album_image {
+            None => {
+                let space = widget::Space::new(iced::Length::Units(500), iced::Length::Units(500));
+                song.push(space)
+            },
+            Some(ref art) => {
+                let art = widget::Image::new(widget::image::Handle::from_memory(art.clone()))
+                    .height(iced::Length::Units(500))
+                    .width(iced::Length::Units(500));
+                song.push(art)
+            },
+        }.push(infos); 
+
 
         let (svg_source, button_message) = match self.player_status {
                 PlayerStatus::Playing => (PAUSE_SVG, PlayerMessage::Pause),
@@ -134,7 +188,7 @@ impl Application for Player {
             .push(volume_slider);
 
         widget::Column::new()
-            .push(infos)
+            .push(song)
             .push(controls)
             .into()
     }
@@ -143,5 +197,9 @@ impl Application for Player {
 
 #[tokio::main]
 async fn main() {
-    Player::run(Settings::default()).unwrap();
+    let settings = Settings {
+        default_font: Some(FONT),
+        ..Settings::default()
+    };
+    Player::run(settings).unwrap();
 }
