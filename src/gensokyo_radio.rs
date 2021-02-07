@@ -6,7 +6,7 @@ pub struct ApiClient {
 
 pub const GR_API: &str = "https://gensokyoradio.net/json/";
 pub const GR_STREAM: &str = "https://stream.gensokyoradio.net/1/";
-pub const GR_ALBUMART_ROOT: &str = "https://gensokyoradio.net/images/albums/500/";
+pub const GR_ALBUMART_ROOT: &str = "https://gensokyoradio.net/images/albums/200/";
 
 const RETRY_SLEEP: u64 = 5;
 
@@ -40,26 +40,11 @@ impl ApiClient {
 
     pub async fn get_album_image(&self, ans: &GRApiAnswer) -> Option<Vec<u8>> {
         let req_path = format!("{}{}", GR_ALBUMART_ROOT, ans.misc.albumart);
-        println!("req_path: {}", req_path);
         let res = self.client.get(req_path.parse::<hyper::Uri>().expect("Failed to parse album art as uri"))
-            .await;
+            .await
+            .ok()?;
 
-        let res = match res {
-            Err(err) => {
-                println!("err: {}", err);
-                return None;
-            }
-            Ok(res) => res,
-        };
-
-        let data = hyper::body::to_bytes(res.into_body()).await;
-        let data = match data {
-            Err(err) => {
-                println!("err: {}", err);
-                return None;
-            }
-            Ok(res) => res,
-        };
+        let data = hyper::body::to_bytes(res.into_body()).await.ok()?;
 
         Some(data.to_vec())
     }

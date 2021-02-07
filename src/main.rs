@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::sync::Arc;
 
 mod gensokyo_radio;
@@ -23,6 +25,7 @@ enum PlayerStatus {
 const PLAY_SVG: &str = include_str!("resources/play.svg");
 const PAUSE_SVG: &str = include_str!("resources/pause.svg");
 const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
+const NO_IMAGE: &[u8] = include_bytes!("resources/gr-logo-placeholder.png");
 
 const DEFAULT_VOLUME: u8 = 10;
 
@@ -134,62 +137,151 @@ impl Application for Player {
     }
 
     fn view(&mut self) -> Element<Self::Message> {
-        let infos = widget::Column::new();
-        let infos = if let Some(ref song_info) = self.current_song_info {
-            infos.push(widget::Text::new(&song_info.songinfo.title))
-                .push(widget::Text::new(&song_info.songinfo.artist))
-                .push(widget::Text::new(&song_info.songinfo.album))
-                .push(widget::Text::new(&song_info.songinfo.circle))
-                .push(widget::Text::new(&song_info.songinfo.year))
-                .push(widget::Text::new(format!("{}:{:02}/{}:{:02}", 
-                            song_info.songtimes.played/60,
-                            song_info.songtimes.played%60,
-                            song_info.songtimes.duration/60,
-                            song_info.songtimes.duration%60)))
+        let player = widget::Row::new();
+
+        let type_column = widget::Column::new()
+            .push(widget::Space::new(iced::Length::Shrink, iced::Length::Units(48)))
+            .push(widget::Text::new("by").size(32).color([1.0, 1.0, 1.0, 0.5]))
+            .push(widget::Text::new("album").size(32).color([1.0, 1.0, 1.0, 0.5]))
+            .push(widget::Text::new("circle").size(32).color([1.0, 1.0, 1.0, 0.5]))
+            .push(widget::Text::new("year").size(32).color([1.0, 1.0, 1.0, 0.5]))
+            .align_items(iced::Align::End);
+
+        let value_column = widget::Column::new();
+        let value_column = if let Some(ref song_info) = self.current_song_info {
+            value_column.push(widget::Text::new(&song_info.songinfo.title).size(48))
+                .push(widget::Text::new(&song_info.songinfo.artist).size(32))
+                .push(widget::Text::new(&song_info.songinfo.album).size(32))
+                .push(widget::Text::new(&song_info.songinfo.circle).size(32))
+                .push(widget::Text::new(&song_info.songinfo.year).size(32))
         } else {
-            infos.push(widget::Text::new(""))
-                .push(widget::Text::new(""))
-                .push(widget::Text::new(""))
-                .push(widget::Text::new(""))
-                .push(widget::Text::new(""))
-                .push(widget::Text::new("--:--"))
+            value_column.push(widget::Text::new("Fetching infos...").size(32))
         };
 
-        let song = widget::Row::new();
-
-        let song = match self.album_image {
+        let art_column = widget::Column::new();
+        let art_column = match self.album_image {
             None => {
-                let space = widget::Space::new(iced::Length::Units(500), iced::Length::Units(500));
-                song.push(space)
+                let art = widget::Image::new(widget::image::Handle::from_memory(NO_IMAGE.to_vec()))
+                    .height(iced::Length::Units(200))
+                    .width(iced::Length::Units(200));
+                art_column.push(art)
             },
             Some(ref art) => {
                 let art = widget::Image::new(widget::image::Handle::from_memory(art.clone()))
-                    .height(iced::Length::Units(500))
-                    .width(iced::Length::Units(500));
-                song.push(art)
+                    .height(iced::Length::Units(200))
+                    .width(iced::Length::Units(200));
+                art_column.push(art)
             },
-        }.push(infos); 
-
-
+        };
+        let elapsed_row = widget::Row::new();
+        let elapsed_row = if let Some(ref song_info) = self.current_song_info {
+             elapsed_row.push(widget::Text::new(format!("{}:{:02}", song_info.songtimes.played/60, song_info.songtimes.played%60)).width(iced::Length::Shrink))
+                .push(widget::Text::new(format!("{}%", self.volume)).width(iced::Length::Fill).horizontal_alignment(iced::HorizontalAlignment::Center))
+                .push(widget::Text::new(format!("{}:{:02}", song_info.songtimes.duration/60, song_info.songtimes.duration%60)).width(iced::Length::Shrink))
+        } else {
+            elapsed_row.push(widget::Text::new("0:00"))
+                .push(widget::Text::new(format!("{}%", self.volume)).width(iced::Length::Fill).horizontal_alignment(iced::HorizontalAlignment::Center))
+                .push(widget::Text::new("0:00"))
+        };
+        
         let (svg_source, button_message) = match self.player_status {
-                PlayerStatus::Playing => (PAUSE_SVG, PlayerMessage::Pause),
-                PlayerStatus::Paused => (PLAY_SVG, PlayerMessage::Play),
-            };
+            PlayerStatus::Playing => (PAUSE_SVG, PlayerMessage::Pause),
+            PlayerStatus::Paused => (PLAY_SVG, PlayerMessage::Play),
+        };
+
+        struct PlayPauseStyle;
+        impl widget::button::StyleSheet for PlayPauseStyle {
+            fn active(&self) -> widget::button::Style {
+                widget::button::Style {
+                    shadow_offset: iced::Vector::new(0.0, 0.0),
+                    background: None,
+                    border_radius: 0.0,
+                    border_width: 0.0,
+                    border_color: iced::Color::new(0.0, 0.0, 0.0, 0.0),
+                    text_color: iced::Color::new(0.0, 0.0, 0.0, 0.0),
+                }
+            }
+        }
 
         let play_pause_svg = widget::Svg::new(widget::svg::Handle::from_memory(svg_source));
         let play_pause = widget::Button::new(&mut self.play_pause_state, play_pause_svg)
+            .style(PlayPauseStyle)
             .on_press(button_message);
 
+        struct SliderStyle;
+        impl widget::slider::StyleSheet for SliderStyle {
+            fn active(&self) -> widget::slider::Style {
+                widget::slider::Style {
+                    rail_colors: (iced::Color::new(1.0, 1.0, 1.0, 1.0), iced::Color::new(0.0, 0.0, 0.0, 0.0)),
+                    handle: widget::slider::Handle {
+                        shape: widget::slider::HandleShape::Circle {radius: 8.0},
+                        color: iced::Color::new(1.0, 1.0, 1.0, 1.0),
+                        border_width: 1.0,
+                        border_color: iced::Color::new(0.0, 0.0, 0.0, 0.5),
+                    },
+                }
+            }
+
+            fn hovered(&self) -> widget::slider::Style {
+                self.active()
+            }
+
+            fn dragging(&self) -> widget::slider::Style {
+                self.active()
+            }
+        }
+
         let volume_slider = widget::Slider::new(&mut self.volume_slider_state, 0..=100, self.volume, PlayerMessage::VolumeChanged)
+            .style(SliderStyle)
             .step(1);
 
         let controls = widget::Row::new()
             .push(play_pause)
-            .push(volume_slider);
+            .push(volume_slider)
+            .spacing(8)
+            .align_items(iced::Align::Center);
 
-        widget::Column::new()
-            .push(song)
+        struct ProgressStyle;
+        impl widget::progress_bar::StyleSheet for ProgressStyle {
+            fn style(&self) -> widget::progress_bar::Style {
+                widget::progress_bar::Style {
+                    bar: iced::Background::Color(iced::Color::new(15.0 / 255.0, 135.0 / 255.0, 255.0 / 255.0, 1.0)),
+                    background: iced::Background::Color(iced::Color::new(9.0 / 255.0, 81.0 / 255.0, 153.0 / 255.0, 1.0)),
+                    border_radius: 0.0,
+                }
+            }
+        }
+
+        let art_column = art_column.push(if let Some(ref song_info) = self.current_song_info {
+            widget::ProgressBar::new(0.0..=song_info.songtimes.duration as f32, song_info.songtimes.played as f32)
+        } else {
+            widget::ProgressBar::new(0.0..=100.0, 0.0)
+        }.style(ProgressStyle).height(iced::Length::Units(8))).push(elapsed_row)
             .push(controls)
+            .max_width(200);
+
+        struct PlayerStyle;
+        impl widget::container::StyleSheet for PlayerStyle {
+            fn style(&self) -> widget::container::Style {
+                widget::container::Style {
+                    text_color: Some(iced::Color::new(1.0, 1.0, 1.0, 1.0)),
+                    background: Some(iced::Background::Color(iced::Color::new(26.0 / 255.0, 21.0 / 255.0, 55.0 / 255.0, 1.0))),
+                    border_radius: 0.0,
+                    border_width: 0.0,
+                    border_color: iced::Color::new(0.0, 0.0, 0.0, 0.0),
+                }
+            }
+        }
+
+        widget::Container::new(player
+            .push(art_column)
+            .push(type_column)
+            .push(value_column)
+            .spacing(8)
+        ).style(PlayerStyle)
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+            .padding(8)
             .into()
     }
 }
@@ -199,6 +291,10 @@ impl Application for Player {
 async fn main() {
     let settings = Settings {
         default_font: Some(FONT),
+        window: iced::window::Settings {
+            size: (640, 294),
+            ..iced::window::Settings::default()
+        },
         ..Settings::default()
     };
     Player::run(settings).unwrap();
