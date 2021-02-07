@@ -19,3 +19,6 @@ ringbuf = "0.2"
 serde_json = "1.0"
 serde = {features = ["derive"], version = "1.0"}
 futures-util = "*"
+iced = {features = ["image", "svg"], version = "0.2"}
+iced_native = "*"
+iced_graphics = "*"
