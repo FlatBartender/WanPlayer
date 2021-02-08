@@ -69,6 +69,8 @@ pub struct SongTimes {
     pub duration: u64,
     pub played: u64,
     pub remaining: u64,
+    pub songstart: u64,
+    pub songend: u64,
 }
 
 #[derive(Deserialize, Debug, Clone)]

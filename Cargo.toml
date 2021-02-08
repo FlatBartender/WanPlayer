@@ -23,3 +23,4 @@ futures-util = "*"
 iced = {features = ["image", "svg"], version = "0.2"}
 iced_native = "*"
 iced_graphics = "*"
+discord_game_sdk = "1.0.1"

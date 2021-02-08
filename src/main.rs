@@ -23,6 +23,11 @@ enum PlayerStatus {
     Paused,
 }
 
+
+enum DiscordControl {
+    SongInfo(gensokyo_radio::GRApiAnswer),
+}
+
 use iced::{
     Application,
     Command,
@@ -30,10 +35,14 @@ use iced::{
     Settings,
     widget,
 };
+use discord_game_sdk::*;
+
+const DISCORD_CLIENT_ID: i64 = 808130280976023563;
 
 struct Player {
     player_status: PlayerStatus,
     player_tx: std::sync::mpsc::Sender<pipeline::PlayerControl>,
+    discord_tx: std::sync::mpsc::Sender<DiscordControl>,
     api_client: Arc<gensokyo_radio::ApiClient>,
     volume: u8,
     album_image: Option<Vec<u8>>,
@@ -56,6 +65,34 @@ impl Application for Player {
         let fut_api_client = api_client.clone();
 
         player_tx.send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME)).expect("Failed to set initial volume");
+        let (discord_tx, discord_rx) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            struct DiscordEventHandler;
+            impl EventHandler for DiscordEventHandler {}
+
+            let mut discord = Discord::new(DISCORD_CLIENT_ID).expect("Failed to connect to Discord API");
+            *discord.event_handler_mut() = Some(DiscordEventHandler);
+            loop {
+                let result = discord_rx.recv_timeout(std::time::Duration::from_secs(1));
+                match result {
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => discord.run_callbacks().expect("Failed to run discord callbacks"),
+                    Err(_) => panic!(),
+                    Ok(DiscordControl::SongInfo(song_info)) => {
+                        let mut activity = Activity::empty();
+                        activity
+                            .with_state("Listening to Gensokyo Radio")
+                            .with_details(&song_info.songinfo.title)
+                            .with_start_time(song_info.songtimes.songstart as i64)
+                            .with_end_time(song_info.songtimes.songend as i64)
+                            .with_large_image_key("presence_image");
+                        discord.update_activity(&activity, |_: &Discord<'_, DiscordEventHandler>, result| {
+                            println!("Error: {:?}", result);
+                        });
+                    }
+                }
+            }
+        });
 
         let commands = vec![
             Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo),
@@ -66,6 +103,7 @@ impl Application for Player {
             Player {
                 player_status,
                 player_tx,
+                discord_tx,
                 api_client,
                 album_image: None,
                 volume: DEFAULT_VOLUME,
@@ -107,6 +145,7 @@ impl Application for Player {
             },
             PlayerMessage::SongInfo(song_info) => {
                 self.current_song_info = Some(song_info.clone());
+                self.discord_tx.send(DiscordControl::SongInfo(song_info.clone())).expect("Failed to send song info to discord");
                 let fut_api_client = self.api_client.clone();
                 Command::perform(async move {
                     fut_api_client.get_album_image(&song_info).await
