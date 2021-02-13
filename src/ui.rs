@@ -2,6 +2,7 @@ use iced::*;
 
 pub const PLAY_SVG: &str = include_str!("resources/play.svg");
 pub const PAUSE_SVG: &str = include_str!("resources/pause.svg");
+pub const ICON: &[u8] = include_bytes!("resources/wan_player.ico");
 pub const NO_IMAGE: &[u8] = include_bytes!("resources/gr-logo-placeholder.png");
 
 pub struct PlayPauseStyle;

@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#[cfg_attr(build = "release", windows_subsystem = "windows")]
 
 use std::sync::Arc;
 
@@ -72,6 +72,7 @@ impl Application for Player {
             impl EventHandler for DiscordEventHandler {}
 
             let mut discord = Discord::new(DISCORD_CLIENT_ID).expect("Failed to connect to Discord API");
+            discord.register_launch_command("https://gensokyoradio.net/music/playing/").expect("Failed to register launch command");
             *discord.event_handler_mut() = Some(DiscordEventHandler);
             loop {
                 let result = discord_rx.recv_timeout(std::time::Duration::from_secs(1));
@@ -82,12 +83,13 @@ impl Application for Player {
                         let mut activity = Activity::empty();
                         activity
                             .with_state("Listening to Gensokyo Radio")
-                            .with_details(&song_info.songinfo.title)
+                            .with_details(&format!("{} - {}", &song_info.songinfo.artist, &song_info.songinfo.title))
                             .with_start_time(song_info.songtimes.songstart as i64)
-                            .with_end_time(song_info.songtimes.songend as i64)
                             .with_large_image_key("presence_image");
-                        discord.update_activity(&activity, |_: &Discord<'_, DiscordEventHandler>, result| {
-                            println!("Error: {:?}", result);
+                        discord.update_activity(&activity, |_, result| {
+                            if let Err(err) = result {
+                                println!("Error: {}", err);
+                            }
                         });
                     }
                 }
@@ -267,10 +269,18 @@ const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
 
 #[tokio::main]
 async fn main() {
+    // Load the reverse-BGRA icon
+    let mut icon = ui::ICON[..].windows(128*128*4).last().unwrap().to_vec();
+    // Reverse it, now it's a forward-ARGB
+    icon.reverse();
+    // Now map 4-len chunks of it to RGBA
+    icon.chunks_exact_mut(4).for_each(|argb| argb.rotate_left(1));
+
     let settings = Settings {
         default_font: Some(FONT),
         window: iced::window::Settings {
             size: (640, 294),
+            icon: iced::window::icon::Icon::from_rgba(icon, 128, 128).ok(),
             ..iced::window::Settings::default()
         },
         ..Settings::default()

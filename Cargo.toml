@@ -3,12 +3,14 @@ name = "wan_player"
 version = "0.1.0"
 authors = ["Flat Bartender <flat.bartender@gmail.com>"]
 edition = "2018"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
 opt-level = 3
-lto = true 
+lto = true
+#panic = "abort"
 
 [dependencies]
 minimp3 = {features = ["async_tokio"], version = "0.5"}
@@ -24,3 +26,6 @@ iced = {features = ["image", "svg"], version = "0.2"}
 iced_native = "*"
 iced_graphics = "*"
 discord_game_sdk = "1.0.1"
+
+[target.'cfg(target_os="windows")'.build-dependencies]
+winres = "0.1"
