@@ -41,7 +41,7 @@ const DISCORD_CLIENT_ID: i64 = 808130280976023563;
 
 struct Player {
     player_status: PlayerStatus,
-    player_tx: std::sync::mpsc::Sender<pipeline::PlayerControl>,
+    player_tx: tokio::sync::mpsc::UnboundedSender<pipeline::PlayerControl>,
     discord_tx: std::sync::mpsc::Sender<DiscordControl>,
     api_client: Arc<gensokyo_radio::ApiClient>,
     volume: u8,
@@ -85,6 +85,7 @@ impl Application for Player {
                             .with_state("Listening to Gensokyo Radio")
                             .with_details(&format!("{} - {}", &song_info.songinfo.artist, &song_info.songinfo.title))
                             .with_start_time(song_info.songtimes.songstart as i64)
+                            .with_end_time(song_info.songtimes.songend as i64)
                             .with_large_image_key("presence_image");
                         discord.update_activity(&activity, |_, result| {
                             if let Err(err) = result {
@@ -269,12 +270,24 @@ const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
 
 #[tokio::main]
 async fn main() {
-    // Load the reverse-BGRA icon
+    // Apparently windows icons store the color data as BGRA but the last row comes first
+    // Load the BGRA icon as the last 128*128 4-bytes chunk of the windows icon
     let mut icon = ui::ICON[..].windows(128*128*4).last().unwrap().to_vec();
-    // Reverse it, now it's a forward-ARGB
+    // Reverse it, now it's a forward-ARGB with reversed rows
     icon.reverse();
-    // Now map 4-len chunks of it to RGBA
-    icon.chunks_exact_mut(4).for_each(|argb| argb.rotate_left(1));
+    // Now we iterate over row chunks of it
+    icon.chunks_exact_mut(128*4).for_each(|row| {
+        // row is argb but reversed, so now we reverse it
+        row.reverse();
+        // row is bgra in the correct order, so we iterate over chunks of it and transform the bgra
+        // to argb
+        row.chunks_exact_mut(4).for_each(|pixel| {
+            pixel.reverse();
+            // Now we have argb pixels
+            pixel.rotate_left(1);
+            // And now we have RGBA pixels, nice.
+        });
+    });
 
     let settings = Settings {
         default_font: Some(FONT),
