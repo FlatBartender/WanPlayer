@@ -2,8 +2,10 @@
 name = "wan_player"
 version = "1.0.0"
 authors = ["Flat Bartender <flat.bartender@gmail.com>"]
+license = "Apache-2.0"
 edition = "2018"
 build = "build.rs"
+readme = "README.md"
 
 [profile.release]
 opt-level = 3
