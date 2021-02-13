@@ -36,10 +36,13 @@ are embedded directly in the final build:
 	changing the images' fill color and making the symbol solid and filled.
 - `NotoSansSC-Regular.otf` if from the [Google Fonts website](https://fonts.google.com/) and is designed by Google and
 	licensed under the [Open Font License](https://scripts.sil.org/OFL).
-- The Discord Rich Presence image was made by [@vibrantrida](https://twitter.com/vibrantrida) who kindly gave her
+- The Discord Rich Presence image was made by [@vibrantrida](https://twitter.com/vibrantrida) who kindly gave their
 	approval for use in this project (even if it is not in the source code)
-- `wan_player.ico` TODO I need to make a new one eventually
-- `gr-logo-placeholder.png` TODO I need to make a new one eventually
+- `wan_player.ico` was made by [@LavenderTGreat](https://twitter.com/LavenderTGreat) who kindly gave their approval for
+	use in this project as an executable, shortcut and window icon.
+- `not_found.png` I made this one and honestly it was so little work you might as well use it for free for whatever
+	project even commercial ones. This one is under
+	[CCO](https://creativecommons.org/publicdomain/zero/1.0/legalcode-plain).
 
 In addition, the `Gensokyo Radio` name, website and APIs used in this project are a property of LunarSpotlight Media.
 The APIs in particular are used with permission from the website owner.
