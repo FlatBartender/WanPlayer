@@ -3722,6 +3722,7 @@ dependencies = [
  "iced",
  "iced_graphics",
  "iced_native",
+ "image",
  "minimp3",
  "ringbuf",
  "serde",

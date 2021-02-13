@@ -285,30 +285,14 @@ const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
 
 #[tokio::main]
 async fn main() {
-    // Apparently windows icons store the color data as BGRA but the last row comes first
-    // Load the BGRA icon as the last 128*128 4-bytes chunk of the windows icon
-    let mut icon = ui::ICON[..].windows(128*128*4).last().unwrap().to_vec();
-    // Reverse it, now it's a forward-ARGB with reversed rows
-    icon.reverse();
-    // Now we iterate over row chunks of it
-    icon.chunks_exact_mut(128*4).for_each(|row| {
-        // row is argb but reversed, so now we reverse it
-        row.reverse();
-        // row is bgra in the correct order, so we iterate over chunks of it and transform the bgra
-        // to argb
-        row.chunks_exact_mut(4).for_each(|pixel| {
-            pixel.reverse();
-            // Now we have argb pixels
-            pixel.rotate_left(1);
-            // And now we have RGBA pixels, nice.
-        });
-    });
-
+    let icon = image::load_from_memory(ui::ICON).expect("Failed to load icon").to_rgba8();
+    let icon_width = icon.width();
+    let icon_height = icon.height();
     let settings = Settings {
         default_font: Some(FONT),
         window: iced::window::Settings {
             size: (640, 294),
-            icon: iced::window::icon::Icon::from_rgba(icon, 128, 128).ok(),
+            icon: iced::window::icon::Icon::from_rgba(icon.into_raw(), icon_width, icon_height).ok(),
             ..iced::window::Settings::default()
         },
         ..Settings::default()
