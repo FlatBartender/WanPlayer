@@ -3,6 +3,8 @@
 A simple desktop player for the [gensokyoradio.net](https://gensokyoradio.net/) web radio with Discord Rich Presence
 integration.
 
+![Screenshot of Wan Player's interface](https://raw.githubusercontent.com/FlatBartender/WanPlayer/assets/wan_player_hZ6TbYViX8.png)
+
 ## Building
 
 The code should be cross-platform. You'll need the Discord Game SDK as well as bindgen properly setup to build this 
@@ -15,7 +17,7 @@ After the Discord Game SDK and `bindgen` are correctly setup, you should be able
 # Redistribution
 
 All the source code files in this project are licensed under the
-[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) license, expect the files in `src/resources` which may
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt) license, except the files in `src/resources` which may
 have their own licenses (see the end of this file for more information).
 
 I have included my own Wan Player Discord Application ID in the source code to make this easy to use and compile for
@@ -34,7 +36,7 @@ are embedded directly in the final build:
 	[Material Design website](https://material.io/resources/icons/). These images are published by Google and licensed
 	under the [Apache License Version 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt). Modifications include
 	changing the images' fill color and making the symbol solid and filled.
-- `NotoSansSC-Regular.otf` if from the [Google Fonts website](https://fonts.google.com/) and is designed by Google and
+- `NotoSansSC-Regular.otf` if from the [Google Fonts website](https://fonts.google.com/), is designed by Google and
 	licensed under the [Open Font License](https://scripts.sil.org/OFL).
 - The Discord Rich Presence image was made by [@vibrantrida](https://twitter.com/vibrantrida) who kindly gave their
 	approval for use in this project (even if it is not in the source code)
