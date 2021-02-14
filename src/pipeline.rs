@@ -89,9 +89,11 @@ async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, sem: Arc<Semaph
 fn playback_init(mut data_rx: Consumer<i16>, playback_control_rx: Receiver<PlaybackControl>, sem: Arc<Semaphore>) {
     let host = cpal::default_host();
     let device = host.default_output_device().expect("Failed to acquire default output device");
-    let mut configs = device.supported_output_configs().expect("Failed to list supported output configs");
+    let mut configs = device.supported_output_configs().expect("Failed to list supported output configs")
+        .filter(|c| c.channels() == 2);
     let config = configs.next().expect("Failed to get output config")
-        .with_max_sample_rate().config();
+        .with_sample_rate(cpal::SampleRate(44100))
+        .config();
 
     let volume = Arc::new(AtomicU8::new(10));
     let cpal_volume = volume.clone();
@@ -141,7 +143,7 @@ pub fn setup_pipeline() -> tokio::sync::mpsc::UnboundedSender<PlayerControl> {
                     let (pctx, playback_control_rx) = channel();
                     playback_control_tx = Some(pctx);
                     let (stream_rx, stream_tx) = duplex(2usize.pow(12));
-                    let rb_size = 2usize.pow(12);
+                    let rb_size = 2usize.pow(14);
                     let (decoder_tx, decoder_rx) = RingBuffer::new(rb_size).split();
                     let sem = Arc::new(Semaphore::new(rb_size));
 
