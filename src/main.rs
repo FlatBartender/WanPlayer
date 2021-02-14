@@ -21,6 +21,12 @@ mod gensokyo_radio;
 mod pipeline;
 mod executor;
 mod ui;
+mod discord;
+
+use discord::{
+    DiscordControl,
+    discord_main_loop,
+};
 
 #[derive(Debug, Clone)]
 enum PlayerMessage {
@@ -38,11 +44,6 @@ enum PlayerStatus {
     Paused,
 }
 
-
-enum DiscordControl {
-    SongInfo(gensokyo_radio::GRApiAnswer),
-}
-
 use iced::{
     Application,
     Command,
@@ -50,9 +51,6 @@ use iced::{
     Settings,
     widget,
 };
-use discord_game_sdk::*;
-
-const DISCORD_CLIENT_ID: i64 = 808130280976023563;
 
 struct Player {
     player_status: PlayerStatus,
@@ -62,7 +60,7 @@ struct Player {
     volume: u8,
     album_image: Option<Vec<u8>>,
     current_song_info: Option<gensokyo_radio::GRApiAnswer>,
-    
+
     play_pause_state: widget::button::State,
     volume_slider_state: widget::slider::State,
 }
@@ -74,7 +72,7 @@ impl Application for Player {
 
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let player_tx = pipeline::setup_pipeline();
-        
+
         let player_status = PlayerStatus::Paused;
         let api_client = Arc::new(gensokyo_radio::ApiClient::new());
         let fut_api_client = api_client.clone();
@@ -82,35 +80,7 @@ impl Application for Player {
         player_tx.send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME)).expect("Failed to set initial volume");
         let (discord_tx, discord_rx) = std::sync::mpsc::channel();
 
-        std::thread::spawn(move || {
-            struct DiscordEventHandler;
-            impl EventHandler for DiscordEventHandler {}
-
-            let mut discord = Discord::new(DISCORD_CLIENT_ID).expect("Failed to connect to Discord API");
-            discord.register_launch_command("https://gensokyoradio.net/music/playing/").expect("Failed to register launch command");
-            *discord.event_handler_mut() = Some(DiscordEventHandler);
-            loop {
-                let result = discord_rx.recv_timeout(std::time::Duration::from_secs(1));
-                match result {
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => discord.run_callbacks().expect("Failed to run discord callbacks"),
-                    Err(_) => panic!(),
-                    Ok(DiscordControl::SongInfo(song_info)) => {
-                        let mut activity = Activity::empty();
-                        activity
-                            .with_state("Listening to Gensokyo Radio")
-                            .with_details(&format!("{} - {}", &song_info.songinfo.artist, &song_info.songinfo.title))
-                            .with_start_time(song_info.songtimes.songstart as i64)
-                            .with_end_time(song_info.songtimes.songend as i64)
-                            .with_large_image_key("presence_image");
-                        discord.update_activity(&activity, |_, result| {
-                            if let Err(err) = result {
-                                println!("Error: {}", err);
-                            }
-                        });
-                    }
-                }
-            }
-        });
+        discord_main_loop(discord_rx);
 
         let commands = vec![
             Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo),
