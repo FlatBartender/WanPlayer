@@ -1,2 +1,4 @@
 /target
 discord_game_sdk.dll
+
+libdiscord_game_sdk.so
