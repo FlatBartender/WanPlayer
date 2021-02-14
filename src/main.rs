@@ -105,7 +105,10 @@ impl Application for Player {
     }
 
     fn title(&self) -> String {
-        String::from("Wan Player")
+        match self.current_song_info {
+            None => format!("Wan Player"),
+            Some(ref song_info) => format!("Wan Player | {} - {}", song_info.songinfo.artist, song_info.songinfo.title),
+        }
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
