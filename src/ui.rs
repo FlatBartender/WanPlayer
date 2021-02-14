@@ -1,11 +1,11 @@
 // Copyright 2021 Flat Bartender <flat.bartender@gmail.com>
-// 
+//
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
 //    You may obtain a copy of the License at
-// 
+//
 //        http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 //    Unless required by applicable law or agreed to in writing, software
 //    distributed under the License is distributed on an "AS IS" BASIS,
 //    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,9 +37,12 @@ pub struct VolumeSliderStyle;
 impl widget::slider::StyleSheet for VolumeSliderStyle {
     fn active(&self) -> widget::slider::Style {
         widget::slider::Style {
-            rail_colors: (iced::Color::new(1.0, 1.0, 1.0, 1.0), iced::Color::new(0.0, 0.0, 0.0, 0.0)),
+            rail_colors: (
+                iced::Color::new(1.0, 1.0, 1.0, 1.0),
+                iced::Color::new(0.0, 0.0, 0.0, 0.0),
+            ),
             handle: widget::slider::Handle {
-                shape: widget::slider::HandleShape::Circle {radius: 8.0},
+                shape: widget::slider::HandleShape::Circle { radius: 8.0 },
                 color: iced::Color::new(1.0, 1.0, 1.0, 1.0),
                 border_width: 1.0,
                 border_color: iced::Color::new(0.0, 0.0, 0.0, 0.5),
@@ -72,7 +75,12 @@ impl widget::container::StyleSheet for PlayerStyle {
     fn style(&self) -> widget::container::Style {
         widget::container::Style {
             text_color: Some(iced::Color::new(1.0, 1.0, 1.0, 1.0)),
-            background: Some(iced::Background::Color(iced::Color::new(26.0 / 255.0, 21.0 / 255.0, 55.0 / 255.0, 1.0))),
+            background: Some(iced::Background::Color(iced::Color::new(
+                26.0 / 255.0,
+                21.0 / 255.0,
+                55.0 / 255.0,
+                1.0,
+            ))),
             border_radius: 0.0,
             border_width: 0.0,
             border_color: iced::Color::new(0.0, 0.0, 0.0, 0.0),

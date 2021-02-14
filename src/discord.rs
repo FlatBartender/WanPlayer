@@ -40,7 +40,7 @@ pub fn discord_main_loop(discord_rx: Receiver<DiscordControl>) {
                     if result.is_none() {
                         discord = None;
                     }
-                },
+                }
                 Err(_) => panic!(),
                 Ok(DiscordControl::SongInfo(song_info)) => {
                     if discord.is_none() {
@@ -58,7 +58,6 @@ pub fn discord_main_loop(discord_rx: Receiver<DiscordControl>) {
                 }
             }
         }
-
     });
 }
 
@@ -69,7 +68,9 @@ fn new_discord_client(client_id: i64) -> Option<Discord<'static, DiscordEventHan
     }
 
     let mut discord = discord.unwrap();
-    discord.register_launch_command("https://gensokyoradio.net/music/playing/").expect("Failed to register launch command");
+    discord
+        .register_launch_command("https://gensokyoradio.net/music/playing/")
+        .expect("Failed to register launch command");
     *discord.event_handler_mut() = Some(DiscordEventHandler);
 
     Some(discord)
@@ -79,7 +80,10 @@ fn activity_from_song_info(song_info: &super::gensokyo_radio::GRApiAnswer) -> Ac
     let mut activity = Activity::empty();
     activity
         .with_state("Listening to Gensokyo Radio")
-        .with_details(&format!("{} - {}", &song_info.songinfo.artist, &song_info.songinfo.title))
+        .with_details(&format!(
+            "{} - {}",
+            &song_info.songinfo.artist, &song_info.songinfo.title
+        ))
         .with_start_time(song_info.songtimes.songstart as i64)
         .with_end_time(song_info.songtimes.songend as i64)
         .with_large_image_key("presence_image");

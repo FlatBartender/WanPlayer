@@ -1,43 +1,28 @@
 // Copyright 2021 Flat Bartender <flat.bartender@gmail.com>
-// 
+//
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
 //    You may obtain a copy of the License at
-// 
+//
 //        http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 //    Unless required by applicable law or agreed to in writing, software
 //    distributed under the License is distributed on an "AS IS" BASIS,
 //    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-use minimp3::{Frame, Error};
-use cpal::traits::{HostTrait, DeviceTrait, StreamTrait};
-use tokio::io::{
-    duplex,
-    DuplexStream,
-    AsyncWriteExt,
-};
-use tokio::sync::Semaphore;
-use ringbuf::{
-    RingBuffer,
-    Producer,
-    Consumer,
-};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hyper::body::HttpBody;
+use minimp3::{Error, Frame};
+use ringbuf::{Consumer, Producer, RingBuffer};
+use tokio::io::{duplex, AsyncWriteExt, DuplexStream};
+use tokio::sync::Semaphore;
 
 use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    mpsc::{channel, Receiver, Sender},
     Arc,
-    mpsc::{
-        channel,
-        Receiver,
-        Sender,
-    },
-    atomic::{
-        AtomicU8,
-        Ordering,
-    }
 };
 
 use crate::gensokyo_radio::GR_STREAM;
@@ -57,10 +42,10 @@ enum PlaybackControl {
 
 async fn stream_thread(mut tx: DuplexStream) {
     let https = hyper_tls::HttpsConnector::new();
-    let client = hyper::client::Client::builder()
-        .build::<_, hyper::Body>(https);
+    let client = hyper::client::Client::builder().build::<_, hyper::Body>(https);
 
-    let mut res = client.get(hyper::Uri::from_static(GR_STREAM))
+    let mut res = client
+        .get(hyper::Uri::from_static(GR_STREAM))
         .await
         .expect("Failed to request stream");
 
@@ -75,12 +60,15 @@ async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, sem: Arc<Semaph
 
     loop {
         match decoder.next_frame_future().await {
-            Ok(Frame {data, ..}) => {
-                let permit = sem.acquire_many(data.len() as u32).await.expect("Failed to acquire ringbuffer semaphore");
+            Ok(Frame { data, .. }) => {
+                let permit = sem
+                    .acquire_many(data.len() as u32)
+                    .await
+                    .expect("Failed to acquire ringbuffer semaphore");
                 tx.push_iter(&mut data.into_iter());
                 permit.forget();
-            },
-            Err(Error::Eof) => {},
+            }
+            Err(Error::Eof) => {}
             Err(e) => panic!("An error happened while waiting for the next frame in decoder: {}", e),
         }
     }
@@ -88,33 +76,42 @@ async fn decoder_thread(mut tx: Producer<i16>, rx: DuplexStream, sem: Arc<Semaph
 
 fn playback_init(mut data_rx: Consumer<i16>, playback_control_rx: Receiver<PlaybackControl>, sem: Arc<Semaphore>) {
     let host = cpal::default_host();
-    let device = host.default_output_device().expect("Failed to acquire default output device");
-    let mut configs = device.supported_output_configs().expect("Failed to list supported output configs")
+    let device = host
+        .default_output_device()
+        .expect("Failed to acquire default output device");
+    let mut configs = device
+        .supported_output_configs()
+        .expect("Failed to list supported output configs")
         .filter(|c| c.channels() == 2);
-    let config = configs.next().expect("Failed to get output config")
+    let config = configs
+        .next()
+        .expect("Failed to get output config")
         .with_sample_rate(cpal::SampleRate(44100))
         .config();
 
     let volume = Arc::new(AtomicU8::new(10));
     let cpal_volume = volume.clone();
 
-    let stream = device.build_output_stream(&config,
-        move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
-            let factor = cpal_volume.load(Ordering::Relaxed) as f32 / 100.0;
-            let written = data_rx.pop_slice(data);
-            sem.add_permits(written);
-            data.iter_mut().for_each(|d| *d = (*d as f32 * factor) as i16);
-        },
-        move |err| {
-            println!("{}", err);
-        },
-        ).expect("Failed to create stream");
+    let stream = device
+        .build_output_stream(
+            &config,
+            move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                let factor = cpal_volume.load(Ordering::Relaxed) as f32 / 100.0;
+                let written = data_rx.pop_slice(data);
+                sem.add_permits(written);
+                data.iter_mut().for_each(|d| *d = (*d as f32 * factor) as i16);
+            },
+            move |err| {
+                println!("{}", err);
+            },
+        )
+        .expect("Failed to create stream");
 
     while let Ok(command) = playback_control_rx.recv() {
         match command {
             PlaybackControl::Volume(v) => {
                 volume.store(v, Ordering::Relaxed);
-            },
+            }
             PlaybackControl::Play => stream.play().expect("Failed to play stream"),
             PlaybackControl::Stop => return,
         }
@@ -122,7 +119,6 @@ fn playback_init(mut data_rx: Consumer<i16>, playback_control_rx: Receiver<Playb
 }
 
 pub fn setup_pipeline() -> tokio::sync::mpsc::UnboundedSender<PlayerControl> {
-
     let (player_tx, mut player_rx) = tokio::sync::mpsc::unbounded_channel();
 
     tokio::spawn(async move {
@@ -136,9 +132,10 @@ pub fn setup_pipeline() -> tokio::sync::mpsc::UnboundedSender<PlayerControl> {
                 PlayerControl::Volume(v) => {
                     volume = v;
                     if let Some(ref pctx) = playback_control_tx {
-                        pctx.send(PlaybackControl::Volume(v)).expect("Failed to send volume to thread");
+                        pctx.send(PlaybackControl::Volume(v))
+                            .expect("Failed to send volume to thread");
                     }
-                },
+                }
                 PlayerControl::Play => {
                     let (pctx, playback_control_rx) = channel();
                     playback_control_tx = Some(pctx);
@@ -152,10 +149,12 @@ pub fn setup_pipeline() -> tokio::sync::mpsc::UnboundedSender<PlayerControl> {
                     std::thread::spawn(move || playback_init(decoder_rx, playback_control_rx, sem));
 
                     if let Some(ref pctx) = playback_control_tx {
-                        pctx.send(PlaybackControl::Volume(volume)).expect("Failed to send volume when creating pipeline");
-                        pctx.send(PlaybackControl::Play).expect("Failed to send play when creating pipeline");
+                        pctx.send(PlaybackControl::Volume(volume))
+                            .expect("Failed to send volume when creating pipeline");
+                        pctx.send(PlaybackControl::Play)
+                            .expect("Failed to send play when creating pipeline");
                     }
-                },
+                }
                 PlayerControl::Pause => {
                     if let Some(ref pctx) = playback_control_tx {
                         pctx.send(PlaybackControl::Stop).expect("Failed to stop playback");

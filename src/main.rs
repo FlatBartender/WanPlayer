@@ -1,11 +1,11 @@
 // Copyright 2021 Flat Bartender <flat.bartender@gmail.com>
-// 
+//
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
 //    You may obtain a copy of the License at
-// 
+//
 //        http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 //    Unless required by applicable law or agreed to in writing, software
 //    distributed under the License is distributed on an "AS IS" BASIS,
 //    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,16 +17,13 @@
 
 use std::sync::Arc;
 
+mod discord;
+mod executor;
 mod gensokyo_radio;
 mod pipeline;
-mod executor;
 mod ui;
-mod discord;
 
-use discord::{
-    DiscordControl,
-    discord_main_loop,
-};
+use discord::{discord_main_loop, DiscordControl};
 
 #[derive(Debug, Clone)]
 enum PlayerMessage {
@@ -44,13 +41,7 @@ enum PlayerStatus {
     Paused,
 }
 
-use iced::{
-    Application,
-    Command,
-    Element,
-    Settings,
-    widget,
-};
+use iced::{widget, Application, Command, Element, Settings};
 
 struct Player {
     player_status: PlayerStatus,
@@ -77,14 +68,22 @@ impl Application for Player {
         let api_client = Arc::new(gensokyo_radio::ApiClient::new());
         let fut_api_client = api_client.clone();
 
-        player_tx.send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME)).expect("Failed to set initial volume");
+        player_tx
+            .send(pipeline::PlayerControl::Volume(DEFAULT_VOLUME))
+            .expect("Failed to set initial volume");
         let (discord_tx, discord_rx) = std::sync::mpsc::channel();
 
         discord_main_loop(discord_rx);
 
         let commands = vec![
-            Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo),
-            Command::perform(async move { tokio::time::sleep(std::time::Duration::from_secs(1)).await }, |_| {PlayerMessage::IncrementElapsed})
+            Command::perform(
+                async move { fut_api_client.get_song_info().await },
+                PlayerMessage::SongInfo,
+            ),
+            Command::perform(
+                async move { tokio::time::sleep(std::time::Duration::from_secs(1)).await },
+                |_| PlayerMessage::IncrementElapsed,
+            ),
         ];
 
         (
@@ -100,14 +99,17 @@ impl Application for Player {
                 play_pause_state: widget::button::State::new(),
                 volume_slider_state: widget::slider::State::new(),
             },
-            Command::batch(commands)
+            Command::batch(commands),
         )
     }
 
     fn title(&self) -> String {
         match self.current_song_info {
             None => format!("Wan Player"),
-            Some(ref song_info) => format!("Wan Player | {} - {}", song_info.songinfo.artist, song_info.songinfo.title),
+            Some(ref song_info) => format!(
+                "Wan Player | {} - {}",
+                song_info.songinfo.artist, song_info.songinfo.title
+            ),
         }
     }
 
@@ -116,44 +118,57 @@ impl Application for Player {
 
         match message {
             PlayerMessage::Play => {
-                self.player_tx.send(PlayerControl::Play).expect("Failed to send play command to Player");
+                self.player_tx
+                    .send(PlayerControl::Play)
+                    .expect("Failed to send play command to Player");
                 self.player_status = PlayerStatus::Playing;
                 Command::none()
-            },
+            }
             PlayerMessage::Pause => {
-                self.player_tx.send(PlayerControl::Pause).expect("Failed to send pause command to Player");
+                self.player_tx
+                    .send(PlayerControl::Pause)
+                    .expect("Failed to send pause command to Player");
                 self.player_status = PlayerStatus::Paused;
                 Command::none()
-            },
+            }
             PlayerMessage::VolumeChanged(volume) => {
-                self.player_tx.send(PlayerControl::Volume(volume)).expect("Failed to send volume command to Player");
+                self.player_tx
+                    .send(PlayerControl::Volume(volume))
+                    .expect("Failed to send volume command to Player");
                 self.volume = volume;
                 Command::none()
-            },
+            }
             PlayerMessage::AlbumArt(opt_art) => {
                 self.album_image = opt_art;
                 Command::none()
-            },
+            }
             PlayerMessage::SongInfo(song_info) => {
                 self.current_song_info = Some(song_info.clone());
-                self.discord_tx.send(DiscordControl::SongInfo(song_info.clone())).expect("Failed to send song info to discord");
+                self.discord_tx
+                    .send(DiscordControl::SongInfo(song_info.clone()))
+                    .expect("Failed to send song info to discord");
                 let fut_api_client = self.api_client.clone();
-                Command::perform(async move {
-                    fut_api_client.get_album_image(&song_info).await
-                }, PlayerMessage::AlbumArt)
-            },
+                Command::perform(
+                    async move { fut_api_client.get_album_image(&song_info).await },
+                    PlayerMessage::AlbumArt,
+                )
+            }
             PlayerMessage::IncrementElapsed => {
                 let mut commands = Vec::with_capacity(2);
                 if let Some(ref mut info) = self.current_song_info {
                     info.songtimes.played += 1;
                     if info.songtimes.played == info.songtimes.duration {
                         let fut_api_client = self.api_client.clone();
-                        commands.push(Command::perform(async move { fut_api_client.get_song_info().await }, PlayerMessage::SongInfo))
+                        commands.push(Command::perform(
+                            async move { fut_api_client.get_song_info().await },
+                            PlayerMessage::SongInfo,
+                        ))
                     }
                 }
-                commands.push(Command::perform(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await
-                }, |_| {PlayerMessage::IncrementElapsed}));
+                commands.push(Command::perform(
+                    async move { tokio::time::sleep(std::time::Duration::from_secs(1)).await },
+                    |_| PlayerMessage::IncrementElapsed,
+                ));
                 Command::batch(commands)
             }
         }
@@ -162,23 +177,49 @@ impl Application for Player {
     fn view(&mut self) -> Element<Self::Message> {
         let player = widget::Row::new();
 
-        let art_column =  {
+        let art_column = {
             let album_image = widget::Image::new(widget::image::Handle::from_memory(
-                    if let Some(ref art) =  self.album_image {
-                        art.clone()
-                    } else {
-                        ui::NO_IMAGE.to_vec()
-                    })).height(iced::Length::Units(200))
+                if let Some(ref art) = self.album_image {
+                    art.clone()
+                } else {
+                    ui::NO_IMAGE.to_vec()
+                },
+            ))
+            .height(iced::Length::Units(200))
             .width(iced::Length::Units(200));
 
             let elapsed_row = widget::Row::new();
             let elapsed_row = if let Some(ref song_info) = self.current_song_info {
-                elapsed_row.push(widget::Text::new(format!("{}:{:02}", song_info.songtimes.played/60, song_info.songtimes.played%60)).width(iced::Length::Shrink))
-                    .push(widget::Text::new(format!("{}%", self.volume)).width(iced::Length::Fill).horizontal_alignment(iced::HorizontalAlignment::Center))
-                    .push(widget::Text::new(format!("{}:{:02}", song_info.songtimes.duration/60, song_info.songtimes.duration%60)).width(iced::Length::Shrink))
+                elapsed_row
+                    .push(
+                        widget::Text::new(format!(
+                            "{}:{:02}",
+                            song_info.songtimes.played / 60,
+                            song_info.songtimes.played % 60
+                        ))
+                        .width(iced::Length::Shrink),
+                    )
+                    .push(
+                        widget::Text::new(format!("{}%", self.volume))
+                            .width(iced::Length::Fill)
+                            .horizontal_alignment(iced::HorizontalAlignment::Center),
+                    )
+                    .push(
+                        widget::Text::new(format!(
+                            "{}:{:02}",
+                            song_info.songtimes.duration / 60,
+                            song_info.songtimes.duration % 60
+                        ))
+                        .width(iced::Length::Shrink),
+                    )
             } else {
-                elapsed_row.push(widget::Text::new("--:--"))
-                    .push(widget::Text::new(format!("{}%", self.volume)).width(iced::Length::Fill).horizontal_alignment(iced::HorizontalAlignment::Center))
+                elapsed_row
+                    .push(widget::Text::new("--:--"))
+                    .push(
+                        widget::Text::new(format!("{}%", self.volume))
+                            .width(iced::Length::Fill)
+                            .horizontal_alignment(iced::HorizontalAlignment::Center),
+                    )
                     .push(widget::Text::new("--:--"))
             };
 
@@ -192,9 +233,14 @@ impl Application for Player {
                 .style(ui::PlayPauseStyle)
                 .on_press(button_message);
 
-            let volume_slider = widget::Slider::new(&mut self.volume_slider_state, 0..=100, self.volume, PlayerMessage::VolumeChanged)
-                .style(ui::VolumeSliderStyle)
-                .step(1);
+            let volume_slider = widget::Slider::new(
+                &mut self.volume_slider_state,
+                0..=100,
+                self.volume,
+                PlayerMessage::VolumeChanged,
+            )
+            .style(ui::VolumeSliderStyle)
+            .step(1);
 
             let controls = widget::Row::new()
                 .push(play_pause)
@@ -203,10 +249,15 @@ impl Application for Player {
                 .align_items(iced::Align::Center);
 
             let progress_bar = if let Some(ref song_info) = self.current_song_info {
-                widget::ProgressBar::new(0.0..=song_info.songtimes.duration as f32, song_info.songtimes.played as f32)
+                widget::ProgressBar::new(
+                    0.0..=song_info.songtimes.duration as f32,
+                    song_info.songtimes.played as f32,
+                )
             } else {
                 widget::ProgressBar::new(0.0..=100.0, 0.0)
-            }.style(ui::SongProgressStyle).height(iced::Length::Units(8));
+            }
+            .style(ui::SongProgressStyle)
+            .height(iced::Length::Units(8));
 
             widget::Column::new()
                 .push(album_image)
@@ -226,7 +277,8 @@ impl Application for Player {
 
             let value_column = widget::Column::new();
             let value_column = if let Some(ref song_info) = self.current_song_info {
-                value_column.push(widget::Text::new(&song_info.songinfo.title).size(48))
+                value_column
+                    .push(widget::Text::new(&song_info.songinfo.title).size(48))
                     .push(widget::Text::new(&song_info.songinfo.artist).size(32))
                     .push(widget::Text::new(&song_info.songinfo.album).size(32))
                     .push(widget::Text::new(&song_info.songinfo.circle).size(32))
@@ -235,17 +287,11 @@ impl Application for Player {
                 value_column.push(widget::Text::new("Fetching infos...").size(32))
             };
 
-            widget::Row::new()
-                .push(type_column)
-                .push(value_column)
-                .spacing(8)
+            widget::Row::new().push(type_column).push(value_column).spacing(8)
         };
 
-        widget::Container::new(player
-            .push(art_column)
-            .push(info_panel)
-            .spacing(8)
-        ).style(ui::PlayerStyle)
+        widget::Container::new(player.push(art_column).push(info_panel).spacing(8))
+            .style(ui::PlayerStyle)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
             .padding(8)
@@ -258,7 +304,9 @@ const FONT: &[u8] = include_bytes!("resources/NotoSansSC-Regular.otf");
 
 #[tokio::main]
 async fn main() {
-    let icon = image::load_from_memory(ui::ICON).expect("Failed to load icon").to_rgba8();
+    let icon = image::load_from_memory(ui::ICON)
+        .expect("Failed to load icon")
+        .to_rgba8();
     let icon_width = icon.width();
     let icon_height = icon.height();
     let settings = Settings {
