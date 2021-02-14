@@ -14,6 +14,8 @@
 
 use iced::*;
 
+use super::PlayerMessage;
+
 pub const PLAY_SVG: &str = include_str!("resources/play.svg");
 pub const PAUSE_SVG: &str = include_str!("resources/pause.svg");
 pub const ICON: &[u8] = include_bytes!("resources/wan_player.ico");
@@ -86,4 +88,69 @@ impl widget::container::StyleSheet for PlayerStyle {
             border_color: iced::Color::new(0.0, 0.0, 0.0, 0.0),
         }
     }
+}
+
+pub fn album_art_widget(album_image: &Option<Vec<u8>>) -> widget::Image {
+    widget::Image::new(widget::image::Handle::from_memory(if let Some(ref art) = album_image {
+        art.clone()
+    } else {
+        NO_IMAGE.to_vec()
+    }))
+    .height(iced::Length::Units(200))
+    .width(iced::Length::Units(200))
+}
+
+pub fn elapsed_widget(
+    song_info: &Option<super::gensokyo_radio::GRApiAnswer>,
+    volume: u8,
+) -> widget::Row<PlayerMessage> {
+    let elapsed_row = widget::Row::new();
+    let elapsed_row = if let Some(ref song_info) = song_info {
+        elapsed_row
+            .push(
+                widget::Text::new(format!(
+                    "{}:{:02}",
+                    song_info.songtimes.played / 60,
+                    song_info.songtimes.played % 60
+                ))
+                .width(iced::Length::Shrink),
+            )
+            .push(
+                widget::Text::new(format!("{}%", volume))
+                    .width(iced::Length::Fill)
+                    .horizontal_alignment(iced::HorizontalAlignment::Center),
+            )
+            .push(
+                widget::Text::new(format!(
+                    "{}:{:02}",
+                    song_info.songtimes.duration / 60,
+                    song_info.songtimes.duration % 60
+                ))
+                .width(iced::Length::Shrink),
+            )
+    } else {
+        elapsed_row
+            .push(widget::Text::new("--:--"))
+            .push(
+                widget::Text::new(format!("{}%", volume))
+                    .width(iced::Length::Fill)
+                    .horizontal_alignment(iced::HorizontalAlignment::Center),
+            )
+            .push(widget::Text::new("--:--"))
+    };
+
+    elapsed_row
+}
+
+pub fn progress_widget(song_info: &Option<super::gensokyo_radio::GRApiAnswer>) -> widget::ProgressBar {
+    if let Some(ref song_info) = song_info {
+        widget::ProgressBar::new(
+            0.0..=song_info.songtimes.duration as f32,
+            song_info.songtimes.played as f32,
+        )
+    } else {
+        widget::ProgressBar::new(0.0..=100.0, 0.0)
+    }
+    .style(SongProgressStyle)
+    .height(iced::Length::Units(8))
 }

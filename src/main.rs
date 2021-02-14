@@ -26,7 +26,7 @@ mod ui;
 use discord::{discord_main_loop, DiscordControl};
 
 #[derive(Debug, Clone)]
-enum PlayerMessage {
+pub enum PlayerMessage {
     Play,
     Pause,
     VolumeChanged(u8),
@@ -178,50 +178,8 @@ impl Application for Player {
         let player = widget::Row::new();
 
         let art_column = {
-            let album_image = widget::Image::new(widget::image::Handle::from_memory(
-                if let Some(ref art) = self.album_image {
-                    art.clone()
-                } else {
-                    ui::NO_IMAGE.to_vec()
-                },
-            ))
-            .height(iced::Length::Units(200))
-            .width(iced::Length::Units(200));
-
-            let elapsed_row = widget::Row::new();
-            let elapsed_row = if let Some(ref song_info) = self.current_song_info {
-                elapsed_row
-                    .push(
-                        widget::Text::new(format!(
-                            "{}:{:02}",
-                            song_info.songtimes.played / 60,
-                            song_info.songtimes.played % 60
-                        ))
-                        .width(iced::Length::Shrink),
-                    )
-                    .push(
-                        widget::Text::new(format!("{}%", self.volume))
-                            .width(iced::Length::Fill)
-                            .horizontal_alignment(iced::HorizontalAlignment::Center),
-                    )
-                    .push(
-                        widget::Text::new(format!(
-                            "{}:{:02}",
-                            song_info.songtimes.duration / 60,
-                            song_info.songtimes.duration % 60
-                        ))
-                        .width(iced::Length::Shrink),
-                    )
-            } else {
-                elapsed_row
-                    .push(widget::Text::new("--:--"))
-                    .push(
-                        widget::Text::new(format!("{}%", self.volume))
-                            .width(iced::Length::Fill)
-                            .horizontal_alignment(iced::HorizontalAlignment::Center),
-                    )
-                    .push(widget::Text::new("--:--"))
-            };
+            let album_image = ui::album_art_widget(&self.album_image);
+            let elapsed_row = ui::elapsed_widget(&self.current_song_info, self.volume);
 
             let (svg_source, button_message) = match self.player_status {
                 PlayerStatus::Playing => (ui::PAUSE_SVG, PlayerMessage::Pause),
@@ -248,16 +206,7 @@ impl Application for Player {
                 .spacing(8)
                 .align_items(iced::Align::Center);
 
-            let progress_bar = if let Some(ref song_info) = self.current_song_info {
-                widget::ProgressBar::new(
-                    0.0..=song_info.songtimes.duration as f32,
-                    song_info.songtimes.played as f32,
-                )
-            } else {
-                widget::ProgressBar::new(0.0..=100.0, 0.0)
-            }
-            .style(ui::SongProgressStyle)
-            .height(iced::Length::Units(8));
+            let progress_bar = ui::progress_widget(&self.current_song_info);
 
             widget::Column::new()
                 .push(album_image)
